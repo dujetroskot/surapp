@@ -1,0 +1,40 @@
+{% extends "main/base.html" %}
+
+{% block title %}Kodiranje ankete{% endblock %}
+
+{% block content %}
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+
+                <h3 class="card-title mb-3">
+                    <i class="bi bi-upload"></i> Kodiranje anketnih podataka
+                </h3>
+
+                <form method="POST" enctype="multipart/form-data">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label class="form-label">Config (.json)</label>
+                        <input type="file" name="config" class="form-control" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Answers (.csv)</label>
+                        <input type="file" name="answers" class="form-control" required>
+                    </div>
+
+                    <button class="btn btn-primary w-100">
+                        <i class="bi bi-gear"></i> Kodiraj podatke
+                    </button>
+                </form>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
