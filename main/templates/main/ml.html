@@ -1,0 +1,584 @@
+{% extends "main/base.html" %}
+
+{% block title %}ML analiza{% endblock %}
+
+{% block content %}
+
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">
+            <i class="bi bi-robot"></i> ML analiza
+        </h2>
+    </div>
+</div>
+
+{% if error %}
+    <div class="alert alert-warning">
+        {{ error }}
+    </div>
+{% else %}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted">Broj uzoraka</h6>
+                <h3>{{ ml.num_samples }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted">Broj značajki</h6>
+                <h3>{{ ml.num_features }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted">Niži rezultat</h6>
+                <h3>{{ ml.class_distribution.lower_result }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted">Viši rezultat</h6>
+                <h3>{{ ml.class_distribution.higher_result }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4>Usporedba skupova značajki</h4>
+        <p class="text-muted">
+            Prikazana je usporedba modela koji koriste samo AAPS značajke i modela koji uz AAPS značajke koriste i demografske varijable.
+            Ova usporedba omogućuje provjeru prediktivne vrijednosti same AAPS ankete te dodatnog doprinosa demografskih podataka.
+        </p>
+
+        <table class="table table-striped mt-3">
+            <thead>
+                <tr>
+                    <th>Skup značajki</th>
+                    <th>Broj značajki</th>
+                    <th>Najbolji model</th>
+                    <th>Accuracy</th>
+                    <th>Precision</th>
+                    <th>Recall</th>
+                    <th>F1-score</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for feature_set in ml.feature_set_results %}
+                    {% with best=feature_set.model_results.0 %}
+                    <tr>
+                        <td>
+                            <strong>{{ feature_set.feature_set_name }}</strong>
+
+                            {% if feature_set.feature_set_name == ml.best_overall_feature_set %}
+                                <span class="badge bg-success ms-2">najbolji skup</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ feature_set.num_features }}</td>
+                        <td>{{ best.model }}</td>
+                        <td>{{ best.accuracy }}</td>
+                        <td>{{ best.precision }}</td>
+                        <td>{{ best.recall }}</td>
+                        <td>{{ best.f1 }}</td>
+                    </tr>
+                    {% endwith %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4>Predikcija pojedinačnih konceptualnih zadataka</h4>
+        <p class="text-muted">
+            Ova analiza provjerava mogu li AAPS značajke predvidjeti točnost svakog konceptualnog zadatka zasebno.
+            Time se može vidjeti predviđaju li AAPS odgovori bolje neki konkretan zadatak nego ukupni rezultat na sva četiri zadatka.
+        </p>
+
+        <table class="table table-striped mt-3">
+            <thead>
+                <tr>
+                    <th>Zadatak</th>
+                    <th>Skup značajki</th>
+                    <th>Netočno</th>
+                    <th>Točno</th>
+                    <th>Najbolji model</th>
+                    <th>Accuracy</th>
+                    <th>Precision</th>
+                    <th>Recall</th>
+                    <th>F1-score</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in ml.task_prediction_results %}
+                <tr>
+                    <td>{{ row.task }}</td>
+                    <td>{{ row.feature_set }}</td>
+
+                    {% if row.skipped %}
+                        <td colspan="7" class="text-muted">
+                            Analiza preskočena: {{ row.reason }}
+                        </td>
+                    {% else %}
+                        <td>{{ row.wrong_count }}</td>
+                        <td>{{ row.correct_count }}</td>
+                        <td>{{ row.best_model }}</td>
+                        <td>{{ row.accuracy }}</td>
+                        <td>{{ row.precision }}</td>
+                        <td>{{ row.recall }}</td>
+                        <td>{{ row.f1 }}</td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h5>Usporedba AAPS-only i AAPS + demografija modela</h5>
+        <div style="height: 320px;">
+            <canvas id="featureSetComparisonChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5>Usporedba modela prema F1 vrijednosti</h5>
+                <div style="height: 320px;">
+                    <canvas id="modelChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5>Najvažnije značajke prema Random Forest modelu</h5>
+                <div style="height: 320px;">
+                    <canvas id="featureChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4>Rezultati modela</h4>
+        <p class="text-muted">
+            U ovoj tablici prikazani su rezultati modela za prošireni skup značajki koji uključuje AAPS značajke i demografske varijable.
+        </p>
+
+        <table class="table table-striped mt-3">
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th>Accuracy</th>
+                    <th>Precision</th>
+                    <th>Recall</th>
+                    <th>F1-score</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in ml.model_results %}
+                <tr>
+                    <td>
+                        {% if row.model == ml.best_model %}
+                            <strong>{{ row.model }}</strong>
+                            <span class="badge bg-success ms-2">najbolji</span>
+                        {% else %}
+                            {{ row.model }}
+                        {% endif %}
+                    </td>
+                    <td>{{ row.accuracy }}</td>
+                    <td>{{ row.precision }}</td>
+                    <td>{{ row.recall }}</td>
+                    <td>{{ row.f1 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4>Matrica zabune za najbolji model: {{ ml.best_model }}</h4>
+        <p class="text-muted">
+            Matrica prikazuje odnos stvarnih i predviđenih klasa.
+            Klasa 0 označava niži rezultat, a klasa 1 viši rezultat.
+        </p>
+
+        <table class="table table-bordered text-center mt-3" style="max-width: 600px;">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Predviđeno: niži rezultat</th>
+                    <th>Predviđeno: viši rezultat</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <th>Stvarno: niži rezultat</th>
+                    <td>{{ ml.confusion_matrix.tn }}</td>
+                    <td>{{ ml.confusion_matrix.fp }}</td>
+                </tr>
+                <tr>
+                    <th>Stvarno: viši rezultat</th>
+                    <td>{{ ml.confusion_matrix.fn }}</td>
+                    <td>{{ ml.confusion_matrix.tp }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4>Najvažnije značajke</h4>
+        <p class="text-muted">
+            Prikazane su značajke koje Random Forest model smatra najvažnijima za predikciju rezultata.
+        </p>
+
+        <table class="table table-striped mt-3">
+            <thead>
+                <tr>
+                    <th>Značajka</th>
+                    <th>Važnost</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in ml.feature_importance %}
+                <tr>
+                    <td>{{ row.feature }}</td>
+                    <td>{{ row.importance }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4>NLP analiza tekstualnih obrazloženja</h4>
+
+        <p class="text-muted">
+            Tekstualna AAPS obrazloženja pretvorena su u TF-IDF značajke i korištena za predikciju
+            nižeg ili višeg rezultata na četiri konceptualna zadatka.
+        </p>
+
+        {% if ml.nlp_text_prediction.available %}
+            <p>
+                <strong>Broj tekstualnih stupaca:</strong> {{ ml.nlp_text_prediction.num_text_columns }} <br>
+                <strong>Broj TF-IDF značajki:</strong> {{ ml.nlp_text_prediction.num_tfidf_features }} <br>
+                <strong>Target:</strong> {{ ml.nlp_text_prediction.target }} <br>
+                <strong>Pravilo:</strong> {{ ml.nlp_text_prediction.target_rule }}
+            </p>
+
+            <table class="table table-bordered mt-3">
+                <thead>
+                    <tr>
+                        <th>Model</th>
+                        <th>Accuracy</th>
+                        <th>Precision</th>
+                        <th>Recall</th>
+                        <th>F1-score</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for model in ml.nlp_text_prediction.model_results %}
+                    <tr>
+                        <td>{{ model.model }}</td>
+                        <td>{{ model.accuracy }}</td>
+                        <td>{{ model.precision }}</td>
+                        <td>{{ model.recall }}</td>
+                        <td>{{ model.f1 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <h6>Matrica zabune za najbolji NLP model</h6>
+
+            <table class="table table-sm table-bordered w-auto">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Predviđeno niži rezultat</th>
+                        <th>Predviđeno viši rezultat</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <th>Stvarno niži rezultat</th>
+                        <td>{{ ml.nlp_text_prediction.confusion_matrix.tn }}</td>
+                        <td>{{ ml.nlp_text_prediction.confusion_matrix.fp }}</td>
+                    </tr>
+                    <tr>
+                        <th>Stvarno viši rezultat</th>
+                        <td>{{ ml.nlp_text_prediction.confusion_matrix.fn }}</td>
+                        <td>{{ ml.nlp_text_prediction.confusion_matrix.tp }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            {% if ml.nlp_text_prediction.top_terms %}
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <h6>Pojmovi povezani s višim rezultatom</h6>
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Pojam</th>
+                                    <th>Težina</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in ml.nlp_text_prediction.top_terms.higher_result_terms %}
+                                <tr>
+                                    <td>{{ item.term }}</td>
+                                    <td>{{ item.weight }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="col-md-6">
+                        <h6>Pojmovi povezani s nižim rezultatom</h6>
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Pojam</th>
+                                    <th>Težina</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in ml.nlp_text_prediction.top_terms.lower_result_terms %}
+                                <tr>
+                                    <td>{{ item.term }}</td>
+                                    <td>{{ item.weight }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endif %}
+
+        {% else %}
+            <div class="alert alert-warning">
+                {{ ml.nlp_text_prediction.reason }}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4>Predikcija Likert odgovora iz tekstualnih obrazloženja</h4>
+
+        <p class="text-muted">
+            Ova NLP analiza provjerava mogu li tekstualna obrazloženja studenata predvidjeti
+            slaže li se student s pripadajućom AAPS tvrdnjom. Tekstualna obrazloženja pretvorena su u
+            TF-IDF značajke, a modeli su trenirani i testirani omjerom 80/20.
+        </p>
+
+        {% if ml.likert_from_text.available %}
+            <p>
+                <strong>Target:</strong> {{ ml.likert_from_text.target_rule }} <br>
+                <strong>Podjela podataka:</strong> {{ ml.likert_from_text.split }}
+            </p>
+
+            <table class="table table-bordered mt-3">
+                <thead>
+                    <tr>
+                        <th>AAPS tvrdnja</th>
+                        <th>Tekstualno obrazloženje</th>
+                        <th>N</th>
+                        <th>Train</th>
+                        <th>Test</th>
+                        <th>Ne slaže se / neutralno</th>
+                        <th>Slaže se</th>
+                        <th>TF-IDF značajke</th>
+                        <th>Najbolji model</th>
+                        <th>Accuracy</th>
+                        <th>Precision</th>
+                        <th>Recall</th>
+                        <th>F1-score</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in ml.likert_from_text.results %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+
+                        {% if row.available %}
+                            <td>{{ row.text_col }}</td>
+                            <td>{{ row.num_samples }}</td>
+                            <td>{{ row.train_size }}</td>
+                            <td>{{ row.test_size }}</td>
+                            <td>{{ row.not_agree_count }}</td>
+                            <td>{{ row.agree_count }}</td>
+                            <td>{{ row.num_tfidf_features }}</td>
+                            <td>{{ row.best_model }}</td>
+                            <td>{{ row.model_results.0.accuracy }}</td>
+                            <td>{{ row.model_results.0.precision }}</td>
+                            <td>{{ row.model_results.0.recall }}</td>
+                            <td>{{ row.model_results.0.f1 }}</td>
+                        {% else %}
+                            <td colspan="12" class="text-muted">
+                                Analiza preskočena: {{ row.reason }}
+                            </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="alert alert-warning">
+                NLP analiza nije dostupna.
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+{% if ml %}
+<script>
+    const featureSetLabels = [
+        {% for feature_set in ml.feature_set_results %}
+            "{{ feature_set.feature_set_name|escapejs }}",
+        {% endfor %}
+    ];
+
+    const featureSetF1Data = [
+        {% for feature_set in ml.feature_set_results %}
+            {{ feature_set.model_results.0.f1 }},
+        {% endfor %}
+    ];
+
+    new Chart(document.getElementById("featureSetComparisonChart"), {
+        type: "bar",
+        data: {
+            labels: featureSetLabels,
+            datasets: [{
+                label: "Najbolji F1-score po skupu značajki",
+                data: featureSetF1Data,
+                backgroundColor: "rgba(111, 66, 193, 0.65)",
+                borderColor: "rgba(111, 66, 193, 1)",
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 1
+                }
+            }
+        }
+    });
+
+    const modelLabels = [
+        {% for row in ml.model_results %}
+            "{{ row.model|escapejs }}",
+        {% endfor %}
+    ];
+
+    const modelF1Data = [
+        {% for row in ml.model_results %}
+            {{ row.f1 }},
+        {% endfor %}
+    ];
+
+    new Chart(document.getElementById("modelChart"), {
+        type: "bar",
+        data: {
+            labels: modelLabels,
+            datasets: [{
+                label: "F1-score",
+                data: modelF1Data,
+                backgroundColor: "rgba(13, 110, 253, 0.65)",
+                borderColor: "rgba(13, 110, 253, 1)",
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 1
+                }
+            }
+        }
+    });
+
+    const featureLabels = [
+        {% for row in ml.feature_importance %}
+            "{{ row.feature|escapejs }}",
+        {% endfor %}
+    ];
+
+    const featureData = [
+        {% for row in ml.feature_importance %}
+            {{ row.importance }},
+        {% endfor %}
+    ];
+
+    new Chart(document.getElementById("featureChart"), {
+        type: "bar",
+        data: {
+            labels: featureLabels,
+            datasets: [{
+                label: "Važnost značajke",
+                data: featureData,
+                backgroundColor: "rgba(25, 135, 84, 0.65)",
+                borderColor: "rgba(25, 135, 84, 1)",
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}

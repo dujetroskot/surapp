@@ -1,0 +1,487 @@
+{% extends "main/base.html" %}
+
+{% block title %}Statistička analiza{% endblock %}
+
+{% block content %}
+
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">
+            <i class="bi bi-bar-chart-line"></i> Statistička analiza
+        </h2>
+    </div>
+</div>
+
+{% if error %}
+    <div class="alert alert-warning">
+        {{ error }}
+    </div>
+{% else %}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted">Broj ispitanika</h6>
+                <h3>{{ analysis.summary.num_students }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted">Slaganje s AAPS tvrdnjama</h6>
+                <h3>{{ analysis.summary.avg_aaps_alignment }}%</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted">Konceptualni zadatci</h6>
+                <h3>{{ analysis.summary.avg_concept_answer_score }}/4</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted">Točan odgovor + obrazloženje</h6>
+                <h3>{{ analysis.summary.avg_concept_both_score }}/4</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5>AAPS slaganje po kategorijama</h5>
+                <div style="height: 300px;">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5>Točnost na konceptualnim zadacima</h5>
+                <div style="height: 300px;">
+                    <canvas id="conceptChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5>Najproblematičnije AAPS tvrdnje</h5>
+                <div style="height: 300px;">
+                    <canvas id="problematicChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5>Korelacije s konceptualnim rezultatom</h5>
+                <div style="height: 300px;">
+                    <canvas id="correlationChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4>Prevladavanje stavova po AAPS kategorijama</h4>
+        <p class="text-muted">
+            Tablica prikazuje u kojim AAPS kategorijama prevladavaju stavovi koji su u skladu sa stručnim odgovorima,
+            a u kojim kategorijama prevladavaju stavovi koji nisu u skladu sa stručnjacima.
+        </p>
+
+        <table class="table table-striped mt-3">
+            <thead>
+                <tr>
+                    <th>Kategorija</th>
+                    <th>Broj tvrdnji</th>
+                    <th>Prosječno slaganje sa stručnjacima</th>
+                    <th>Interpretacija</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in analysis.category_stats %}
+                <tr>
+                    <td>{{ row.category_name }}</td>
+                    <td>{{ row.num_items }}</td>
+                    <td>{{ row.avg_alignment }}%</td>
+                    <td>
+                        {% if row.avg_alignment > 50 %}
+                            <span class="badge bg-success">
+                                {{ row.dominant_attitude }}
+                            </span>
+                        {% elif row.avg_alignment < 50 %}
+                            <span class="badge bg-danger">
+                                {{ row.dominant_attitude }}
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary">
+                                {{ row.dominant_attitude }}
+                            </span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4>Najproblematičnije AAPS tvrdnje</h4>
+        <p class="text-muted">Tvrdnje s najmanjim slaganjem studentskih odgovora sa stavom stručnjaka.</p>
+
+        <table class="table table-bordered mt-3">
+            <thead>
+                <tr>
+                    <th>AAPS tvrdnja</th>
+                    <th>Stav stručnjaka</th>
+                    <th>Slaganje studenata</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in analysis.problematic_items %}
+                <tr>
+                    <td>{{ row.item }}</td>
+                    <td>{{ row.expert_answer }}</td>
+                    <td>{{ row.alignment_percent }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4>Korelacije s rezultatom na konceptualnim zadacima</h4>
+
+        <table class="table table-striped mt-3">
+            <thead>
+                <tr>
+                    <th>Varijabla</th>
+                    <th>Spearman korelacija</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in analysis.correlations %}
+                <tr>
+                    <td>{{ row.variable }}</td>
+                    <td>{{ row.correlation }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4>Usporedba prema razini slaganja sa stručnjacima</h4>
+        <p class="text-muted">
+            Ispitanici su podijeljeni u tri skupine prema ukupnom AAPS slaganju sa stručnim odgovorima.
+            Time se provjerava ostvaruju li studenti s većim slaganjem bolje rezultate na konceptualnim zadacima.
+        </p>
+
+        <table class="table table-striped mt-3">
+            <thead>
+                <tr>
+                    <th>Skupina</th>
+                    <th>Pravilo</th>
+                    <th>N</th>
+                    <th>AAPS slaganje</th>
+                    <th>Koncept. odgovor</th>
+                    <th>Koncept. obrazloženje</th>
+                    <th>Odgovor + obrazloženje</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in analysis.alignment_group_analysis %}
+                <tr>
+                    <td>{{ row.group }}</td>
+                    <td>{{ row.rule }}</td>
+                    <td>{{ row.num_students }}</td>
+                    <td>{{ row.avg_aaps_alignment|default_if_none:"-" }}%</td>
+                    <td>{{ row.avg_concept_answer_score|default_if_none:"-" }}/4</td>
+                    <td>{{ row.avg_concept_reasoning_score|default_if_none:"-" }}/4</td>
+                    <td>{{ row.avg_concept_both_score|default_if_none:"-" }}/4</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4>Točnost konceptualnih zadataka prema razini AAPS slaganja</h4>
+        <p class="text-muted">
+            Tablica prikazuje točnost glavnog odgovora za svaki od četiri konceptualna zadatka po skupinama ispitanika.
+            Ovdje se može vidjeti jesu li studenti s većim slaganjem sa stručnjacima bolje riješili pojedini zadatak.
+        </p>
+
+        <table class="table table-bordered mt-3">
+            <thead>
+                <tr>
+                    <th>Skupina</th>
+                    <th>Z1 odgovor</th>
+                    <th>Z2 odgovor</th>
+                    <th>Z3 odgovor</th>
+                    <th>Z4 odgovor</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in analysis.alignment_group_analysis %}
+                <tr>
+                    <td>{{ row.group }}</td>
+                    <td>{{ row.z1_answer_accuracy|default_if_none:"-" }}%</td>
+                    <td>{{ row.z2_answer_accuracy|default_if_none:"-" }}%</td>
+                    <td>{{ row.z3_answer_accuracy|default_if_none:"-" }}%</td>
+                    <td>{{ row.z4_answer_accuracy|default_if_none:"-" }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4>Analiza 4 konceptualna zadatka</h4>
+
+        <table class="table table-bordered mt-3">
+            <thead>
+                <tr>
+                    <th>Zadatak</th>
+                    <th>Točnost odgovora</th>
+                    <th>Točnost obrazloženja</th>
+                    <th>Oboje točno</th>
+                    <th>Sigurnost kod točnih</th>
+                    <th>Sigurnost kod netočnih</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in analysis.concept_task_stats %}
+                <tr>
+                    <td>{{ row.task }}</td>
+                    <td>{{ row.answer_accuracy }}%</td>
+                    <td>{{ row.reasoning_accuracy }}%</td>
+                    <td>{{ row.both_accuracy }}%</td>
+                    <td>{{ row.avg_confidence_correct }}</td>
+                    <td>{{ row.avg_confidence_wrong }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4>Usporedba prema spolu</h4>
+
+        <table class="table table-striped mt-3">
+            <thead>
+                <tr>
+                    <th>Grupa</th>
+                    <th>N</th>
+                    <th>Kat-1</th>
+                    <th>Kat-2</th>
+                    <th>Kat-3</th>
+                    <th>Koncept. rezultat</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in analysis.demographic_stats.gender %}
+                <tr>
+                    <td>{{ row.group }}</td>
+                    <td>{{ row.num_students }}</td>
+                    <td>{{ row.kat1 }}%</td>
+                    <td>{{ row.kat2 }}%</td>
+                    <td>{{ row.kat3 }}%</td>
+                    <td>{{ row.concept_score }}/4</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+{% if analysis %}
+<script>
+    const categoryLabels = [
+        {% for row in analysis.category_stats %}
+            "{{ row.category_code|escapejs }}",
+        {% endfor %}
+    ];
+
+    const categoryData = [
+        {% for row in analysis.category_stats %}
+            {{ row.avg_alignment }},
+        {% endfor %}
+    ];
+
+    new Chart(document.getElementById("categoryChart"), {
+        type: "bar",
+        data: {
+            labels: categoryLabels,
+            datasets: [{
+                label: "Prosječno slaganje sa stručnjakom (%)",
+                data: categoryData,
+                backgroundColor: "rgba(13, 110, 253, 0.65)",
+                borderColor: "rgba(13, 110, 253, 1)",
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+
+    const conceptLabels = [
+        {% for row in analysis.concept_task_stats %}
+            "{{ row.task|escapejs }}",
+        {% endfor %}
+    ];
+
+    const conceptData = [
+        {% for row in analysis.concept_task_stats %}
+            {{ row.answer_accuracy }},
+        {% endfor %}
+    ];
+
+    new Chart(document.getElementById("conceptChart"), {
+        type: "bar",
+        data: {
+            labels: conceptLabels,
+            datasets: [{
+                label: "Točnost odgovora (%)",
+                data: conceptData,
+                backgroundColor: "rgba(25, 135, 84, 0.65)",
+                borderColor: "rgba(25, 135, 84, 1)",
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+
+    const problematicLabels = [
+        {% for row in analysis.problematic_items %}
+            "AAPS {{ row.item }}",
+        {% endfor %}
+    ];
+
+    const problematicData = [
+        {% for row in analysis.problematic_items %}
+            {{ row.alignment_percent }},
+        {% endfor %}
+    ];
+
+    new Chart(document.getElementById("problematicChart"), {
+        type: "bar",
+        data: {
+            labels: problematicLabels,
+            datasets: [{
+                label: "Slaganje studenata sa stručnjakom (%)",
+                data: problematicData,
+                backgroundColor: "rgba(220, 53, 69, 0.65)",
+                borderColor: "rgba(220, 53, 69, 1)",
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+
+    const correlationLabels = [
+        {% for row in analysis.correlations %}
+            "{{ row.variable|escapejs }}",
+        {% endfor %}
+    ];
+
+    const correlationData = [
+        {% for row in analysis.correlations %}
+            {{ row.correlation|default:0 }},
+        {% endfor %}
+    ];
+
+    new Chart(document.getElementById("correlationChart"), {
+        type: "bar",
+        data: {
+            labels: correlationLabels,
+            datasets: [{
+                label: "Spearman korelacija",
+                data: correlationData,
+                backgroundColor: "rgba(255, 193, 7, 0.65)",
+                borderColor: "rgba(255, 193, 7, 1)",
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    min: -1,
+                    max: 1
+                }
+            }
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}
