@@ -4,14 +4,13 @@ import re
 
 from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import LinearSVC
-
 
 AAPS_TEXT_LIKERT_PAIRS = [
     {
@@ -91,6 +90,7 @@ def run_likert_from_text_single_question(df, pair):
         }
 
     y = data[likert_col].apply(lambda value: 1 if value >= 4 else 0).astype(int)
+    
     texts = data[text_col]
 
     class_counts = y.value_counts()
@@ -377,32 +377,56 @@ def train_models(X, y):
             ("scaler", StandardScaler()),
             ("model", LogisticRegression(max_iter=1000, class_weight="balanced"))
         ]),
-
         "Random Forest": RandomForestClassifier(
             n_estimators=200,
             random_state=42,
             class_weight="balanced"
         ),
-
         "Linear SVM": Pipeline([
             ("scaler", StandardScaler()),
             ("model", LinearSVC(max_iter=5000, class_weight="balanced", random_state=42))
         ]),
     }
 
+    train_class_counts = y_train.value_counts()
+    min_class_count = int(train_class_counts.min())
+
+    if min_class_count >= 5:
+        n_splits = 5
+    elif min_class_count >= 3:
+        n_splits = 3
+    else:
+        n_splits = 2
+
+    cv = StratifiedKFold(
+        n_splits=n_splits,
+        shuffle=True,
+        random_state=42
+    )
+
     results = []
     trained_models = {}
 
     for model_name, model in models.items():
+        cv_scores = cross_val_score(
+            model,
+            X_train,
+            y_train,
+            cv=cv,
+            scoring="f1"
+        )
+
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
 
         results.append({
             "model": model_name,
-            "accuracy": round(accuracy_score(y_test, y_pred), 4),
-            "precision": round(precision_score(y_test, y_pred, zero_division=0), 4),
-            "recall": round(recall_score(y_test, y_pred, zero_division=0), 4),
-            "f1": round(f1_score(y_test, y_pred, zero_division=0), 4),
+            "cv_f1": round(float(cv_scores.mean()), 3),
+            "cv_f1_std": round(float(cv_scores.std()), 3),
+            "accuracy": round(accuracy_score(y_test, y_pred), 3),
+            "precision": round(precision_score(y_test, y_pred, zero_division=0), 3),
+            "recall": round(recall_score(y_test, y_pred, zero_division=0), 3),
+            "f1": round(f1_score(y_test, y_pred, zero_division=0), 3),
         })
 
         trained_models[model_name] = {
@@ -411,7 +435,7 @@ def train_models(X, y):
             "y_pred": y_pred,
         }
 
-    results = sorted(results, key=lambda x: x["f1"], reverse=True)
+    results = sorted(results, key=lambda x: x["cv_f1"], reverse=True)
 
     return results, trained_models, X_train, X_test, y_train, y_test
 
@@ -615,18 +639,10 @@ def run_nlp_text_prediction_analysis(df):
 
     texts = combine_text_columns(df, text_columns)
 
-    vectorizer = TfidfVectorizer(
-        max_features=300,
-        min_df=3,
-        ngram_range=(1, 2)
-    )
-
-    X = vectorizer.fit_transform(texts)
-
     use_stratify = y if class_counts.min() >= 2 else None
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X,
+        texts,
         y,
         test_size=0.25,
         random_state=42,
@@ -634,26 +650,70 @@ def run_nlp_text_prediction_analysis(df):
     )
 
     models = {
-        "Logistic Regression": LogisticRegression(
-            max_iter=1000,
-            class_weight="balanced"
-        ),
-        "Linear SVM": LinearSVC(
-            max_iter=5000,
-            class_weight="balanced",
-            random_state=42
-        ),
+        "Logistic Regression": Pipeline([
+            ("tfidf", TfidfVectorizer(
+                max_features=300,
+                min_df=3,
+                ngram_range=(1, 2)
+            )),
+            ("model", LogisticRegression(
+                max_iter=1000,
+                class_weight="balanced"
+            ))
+        ]),
+        "Linear SVM": Pipeline([
+            ("tfidf", TfidfVectorizer(
+                max_features=300,
+                min_df=3,
+                ngram_range=(1, 2)
+            )),
+            ("model", LinearSVC(
+                max_iter=5000,
+                class_weight="balanced",
+                random_state=42
+            ))
+        ]),
     }
+
+    train_class_counts = y_train.value_counts()
+    min_class_count = int(train_class_counts.min())
+
+    if min_class_count >= 5:
+        n_splits = 5
+    elif min_class_count >= 3:
+        n_splits = 3
+    else:
+        n_splits = 2
+
+    cv = StratifiedKFold(
+        n_splits=n_splits,
+        shuffle=True,
+        random_state=42
+    )
 
     results = []
     trained_models = {}
 
     for model_name, model in models.items():
+        cv_scores = cross_val_score(
+            model,
+            X_train,
+            y_train,
+            cv=cv,
+            scoring="f1"
+        )
+
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
 
         results.append({
             "model": model_name,
+
+            # Rezultat korišten za izbor modela
+            "cv_f1": round(float(cv_scores.mean()), 3),
+            "cv_f1_std": round(float(cv_scores.std()), 3),
+
+            # Konačna evaluacija na testnom skupu
             "accuracy": round(accuracy_score(y_test, y_pred), 3),
             "precision": round(precision_score(y_test, y_pred, zero_division=0), 3),
             "recall": round(recall_score(y_test, y_pred, zero_division=0), 3),
@@ -666,19 +726,25 @@ def run_nlp_text_prediction_analysis(df):
             "y_pred": y_pred,
         }
 
-    results = sorted(results, key=lambda x: x["f1"], reverse=True)
+    # Model se bira prema F1 rezultatu iz cross-validacije na trening skupu,
+    # a ne prema F1 rezultatu na testnom skupu.
+    results = sorted(results, key=lambda x: x["cv_f1"], reverse=True)
 
     best_model_name = results[0]["model"]
     confusion = get_confusion_matrix(best_model_name, trained_models)
 
+    best_pipeline = trained_models[best_model_name]["model"]
+
+    vectorizer = best_pipeline.named_steps["tfidf"]
+    classifier = best_pipeline.named_steps["model"]
+
     feature_names = vectorizer.get_feature_names_out()
+    num_tfidf_features = len(feature_names)
 
     top_terms = []
 
-    best_model = trained_models[best_model_name]["model"]
-
-    if hasattr(best_model, "coef_"):
-        coefficients = best_model.coef_[0]
+    if hasattr(classifier, "coef_"):
+        coefficients = classifier.coef_[0]
 
         top_positive_indices = coefficients.argsort()[-10:][::-1]
         top_negative_indices = coefficients.argsort()[:10]
@@ -704,7 +770,7 @@ def run_nlp_text_prediction_analysis(df):
         "available": True,
         "text_columns": text_columns,
         "num_text_columns": len(text_columns),
-        "num_tfidf_features": int(X.shape[1]),
+        "num_tfidf_features": int(num_tfidf_features),
         "target": "concept_result_label",
         "target_rule": "0 ili 1 točan odgovor = niži rezultat; 2, 3 ili 4 točna odgovora = viši rezultat",
         "model_results": results,
